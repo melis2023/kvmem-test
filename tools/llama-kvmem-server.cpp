@@ -2007,6 +2007,9 @@ int main(int argc, char ** argv) {
     httplib::Server svr;
     svr.set_read_timeout(1800, 0);
     svr.set_write_timeout(1800, 0);
+    svr.set_socket_options([](socket_t sock) {
+        httplib::set_socket_opt(sock, SOL_SOCKET, SO_REUSEADDR, 1);
+    });
     svr.set_idle_interval(0, 100000);
     svr.set_default_headers({
         {"Access-Control-Allow-Origin", "*"},

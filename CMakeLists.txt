@@ -25,11 +25,42 @@ if (KVMEM_BUILD_LLAMA)
     if (NOT CMAKE_CUDA_COMPILER AND EXISTS "/home/leye/kvmem_qw3/.cu13-env/bin/nvcc")
         set(CMAKE_CUDA_COMPILER "/home/leye/kvmem_qw3/.cu13-env/bin/nvcc" CACHE FILEPATH "nvcc")
     endif()
-    if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        set(CMAKE_CUDA_ARCHITECTURES "120a-real" CACHE STRING "Blackwell sm_120")
-    endif()
 
+    # --- CUDA architecture auto-detection (mirrors ggml-cuda logic) --------
+    # CMAKE_CUDA_ARCHITECTURES must be defined at THIS scope so it propagates
+    # to ALL subdirectories (llama.cpp/src, llama.cpp/ggml, etc.).
+    # ggml-cuda sets it in its own subdirectory scope which doesn't propagate
+    # back to sibling targets like the "llama" library.
     option(GGML_CUDA "ggml: use CUDA" ON)
+    if (GGML_CUDA AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        find_package(CUDAToolkit QUIET)
+        if (CUDAToolkit_FOUND)
+            option(GGML_NATIVE "ggml: use native CPU/GPU" ON)
+            if (GGML_NATIVE AND CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.6" AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+                # native == detect GPU at build time (single-arch binary)
+                set(CMAKE_CUDA_ARCHITECTURES "native")
+            else()
+                # GGML_NATIVE=OFF: build for ALL common architectures with hardware acceleration (real only)
+                # Only keep real architectures for hardware-accelerated GPUs (no virtual/PTX)
+                if (CUDAToolkit_VERSION VERSION_LESS "13")
+                    list(APPEND CMAKE_CUDA_ARCHITECTURES 70-real)   # V100/Titan V (Volta)
+                endif()
+                if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.0")
+                    list(APPEND CMAKE_CUDA_ARCHITECTURES 75-real)   # RTX 2060/2070/2080 (Turing)
+                endif()
+                list(APPEND CMAKE_CUDA_ARCHITECTURES 86-real)   # RTX 3060/3070/3080/3090 (Ampere)
+                if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.8")
+                    list(APPEND CMAKE_CUDA_ARCHITECTURES 89-real)   # RTX 4060/4070/4080/4090 (Ada Lovelace)
+                endif()
+                if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "12.8")
+                    list(APPEND CMAKE_CUDA_ARCHITECTURES 120a-real) # RTX 5050/5060/5060 Ti/5070/5070 Ti/5080/5090 (Blackwell)
+                endif()
+            endif()
+            # Force as CACHE so ALL subdirectories (including llama.cpp/ggml) inherit
+            set(CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES} CACHE STRING "" FORCE)
+        endif()
+        message(STATUS "KVMem: CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES} (GGML_NATIVE=${GGML_NATIVE})")
+    endif()
     # Default llama.cpp FA vec kernels are only F16/Q4_0/Q8_0/BF16. q5_0 KV
     # (and q4_1/q5_1) need this or FlashAttention refuses those types and
     # Qwen3.8 hybrid prefill collapses (~75 t/s vs ~500).
@@ -45,6 +76,15 @@ if (KVMEM_BUILD_LLAMA)
     set(LLAMA_BUILD_COMMON ON CACHE BOOL "")
 
     add_subdirectory(llama.cpp)
+
+    # kvmem-mtp-kv-test references internal llama symbols (llama_memory_kvmem_mtp::*,
+    # llama_memory_hybrid::*, kvmem_stagein_*) that are not part of the LLAMA_API
+    # surface. On Linux the .so exports them by default; on Windows a DLL does not,
+    # so linking fails with LNK2019. Export everything from the llama DLL to match
+    # the Linux behavior.
+    if (WIN32 AND TARGET llama)
+        set_property(TARGET llama PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
 
     # Upstream only adds tools/ui (the stock Web UI) when LLAMA_BUILD_SERVER is
     # ON, which this project deliberately forces OFF. Pull the UI in directly so

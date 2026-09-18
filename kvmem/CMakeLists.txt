@@ -1,4 +1,4 @@
-add_library(kvmem
+add_library(kvmem STATIC
     src/host/kvmem_store.cpp
     src/host/kvmem_runtime.cpp
     src/host/raw_kv_store.cpp

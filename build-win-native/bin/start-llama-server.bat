@@ -52,7 +52,7 @@ title KVMem llama-server - Qwen3.8-27B-IQ3_S-mtp
 
 REM Fixed install directory of the KVMem server build (absolute, not relative
 REM to this script). Change BIN here if the build tree ever moves.
-set "BIN=I:\llama\kvmem-llama.cpp-v016\build-win-native\bin"
+set "BIN=I:\llama\kvmem-llama.cpp-v016\kvmem-test\build-win-native\bin"
 set "EXE=%BIN%\llama-kvmem-server.exe"
 if not exist "%EXE%" (
     echo ERROR: llama-kvmem-server.exe not found:
@@ -71,11 +71,11 @@ cd /d "%BIN%"
   --jinja ^
   --chat-template-file "I:\templates\chat_template.jinja" ^
   -lm none ^
-  --host 127.0.0.1 --port 8080 ^
-  -c 262144 -n 16384 -b 512  -ngl 99 ^
-  --kvmem-budget 36864 --kvmem-gen-reserve 16384  ^
+  --host 127.0.0.1 -n 16384 --port 8080 ^
+  -c 256000  -b 512  -ngl 99 ^
+  --kvmem-budget 36864 --kvmem-gen-reserve 16384  --kvmem-gpu-ratio 0.8 --kvmem-block-tokens 128^
   --kv-dtype q8_0 ^
-  --spec-type draft-mtp --spec-draft-n-max 2 --spec-kv-dtype f16 ^
+  --spec-type draft-mtp --spec-draft-n-max 3 --spec-kv-dtype f16 ^
   --enable-thinking --reasoning-effort medium --reasoning-budget 8192 ^
   --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0 ^
   --presence-penalty 0.0 --frequency-penalty 0.0 --repeat-penalty 1.0  --webui
